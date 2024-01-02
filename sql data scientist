@@ -1,0 +1,269 @@
+use [master]
+go
+
+create database [Red30Tech]
+/*
+Created By: Kendall Ruber
+Bringing data from an Excel files into SQL Server Management Studio and setting up constraints.
+*/
+
+-- Step 1: Create a new database to upload your datasets into
+
+USE [master]
+GO
+CREATE DATABASE [Red30Tech]
+
+-- Step 2: Switch to using the new database you just created
+USE [Red30Tech] 
+
+-- Step 3: Upload the datasets as tables into SSMS
+-- Follow along with demo in video. Ensure you close out and reopen SSMS when completed. Make sure that you run USE [Red30Tech] again if you exit and re-enter SSMS!
+
+-- Step 4:  Add Primary Key Constraints
+
+  --- SET PK FOR ONLINE RETAIL SALES
+  -- First, Make cols Non-Nullable
+  ALTER TABLE dbo.OnlineRetailSales$
+  ALTER COLUMN OrderNum float NOT NULL
+  GO
+  
+  -- Identify OrderNum as the Primary Key of this table
+  ALTER TABLE dbo.OnlineRetailSales$ add primary key (OrderNum) 
+  GO
+  
+  --- SET PK FOR SESSION INFO 
+  -- First, Make cols Non-Nullable
+  ALTER TABLE dbo.SessionInfo$
+  ALTER COLUMN [Start Date] datetime NOT NULL
+  GO 
+
+  ALTER TABLE dbo.SessionInfo$
+  ALTER COLUMN [End Date] datetime NOT NULL
+  GO
+
+  ALTER TABLE dbo.SessionInfo$
+  ALTER COLUMN [Session Name] nvarchar(255) NOT NULL
+  GO 
+  
+  -- Identify Start Date, End Date, and Session name as the Primary Key of this table
+  ALTER TABLE dbo.SessionInfo$ add primary key ([Start Date],[End Date],[Session Name]) 
+  GO
+
+  --- SET PK FOR SPEAKER INFO
+  -- First, Make cols Non-Nullable
+  ALTER TABLE dbo.SpeakerInfo$
+  ALTER COLUMN [Name] nvarchar(255) NOT NULL
+  GO 
+
+  ALTER TABLE dbo.SpeakerInfo$
+  ALTER COLUMN [Session Name] nvarchar(255) NOT NULL
+  GO
+
+  -- Identify Name and Session Name as the Primary Key of this table
+  -- Some session topics are duplicates of each other but they are delivered by different speakers
+  ALTER TABLE dbo.SpeakerInfo$ add primary key ([Name],[Session Name]) 
+  GO
+  
+  --- SET PK FOR CONFERENCE ATTENDEES
+  -- First, Make cols Non-Nullable
+  ALTER TABLE dbo.ConventionAttendees$
+  ALTER COLUMN [Email] nvarchar(255)  NOT NULL
+  GO
+  
+  -- Identify Email as the Primary Key of this table
+  ALTER TABLE dbo.ConventionAttendees$ add primary key (Email) 
+  GO
+  
+  --- SET PK FOR INVENTORY
+  -- First, Make cols Non-Nullable
+  ALTER TABLE dbo.Inventory$
+  ALTER COLUMN ProdNumber nvarchar(255) NOT NULL
+  GO
+
+  ALTER TABLE dbo.Inventory$
+  ALTER COLUMN ProdName nvarchar(255) NOT NULL
+  GO
+  
+  -- Identify ProdNumber and ProdName as the composite Primary Key of this table
+  ALTER TABLE dbo.Inventory$ add primary key ([ProdNumber],[ProdName])
+  GO
+  
+  --- SET PK FOR EMPLOYEE DIRECTORY
+  -- First, Make cols Non-Nullable
+  ALTER TABLE dbo.EmployeeDirectory$
+  ALTER COLUMN EmployeeID nvarchar(255) NOT NULL
+  GO
+  
+  -- Identify EmployeeID as the composite Primary Key of this table
+  ALTER TABLE dbo.EmployeeDirectory$ add primary key ([EmployeeID])
+  GO
+  
+  -- NOTE: You may need to refresh your connection to see this change under the Keys section. If that does not work, you may need to exit out of SSMS and re-enter. 
+  -- Make sure that you run USE [Red30Tech] again if you exit and re-enter SSMS!
+
+-- You're ready to start querying!
+ select * 
+ from OnlineRetailSales$
+ where [Order Total]>=
+ (select avg([Order Total]) from OnlineRetailSales$);
+
+ select [speaker Name],[session Name],[start Date],[End Date],[Room Name]
+ from SessionInfo$
+ where [Speaker Name] in
+                          (select [Name] from SpeakerInfo$
+                          where [Organization] = 'Two Trees Olive Oil');
+
+ select [speaker Name],[start Date],[End Date],[Room Name],Ses.[Session Name]
+ from SessionInfo$ as ses
+ inner join SpeakerInfo$ on SpeakerInfo$.[Name]= ses.[Speaker Name]
+ where [Organization] = 'Two Trees Olive Oil';
+
+
+ select [first Name],[Last Name],[State],[Email],[Phone Number]
+ from [ConventionAttendees$] as conv
+ where not exists 
+                   (select [CustState] from OnlineRetailSales$ as o
+				   where conv.[State]=o.[CustState]);
+
+select * from OnlineRetailSales$ ;			
+
+select   [ProdCAtegory],[ProdNumber],[ProdName] ,[In Stock]
+from Inventory$
+where [In Stock] < 
+             (select AVG ([In Stock]) from Inventory$)
+
+					
+With AVGTOTAL(AVG_TOTAL) AS
+(SELECT AVG([ORDER TOTAL]) AS AVG_TOTAL
+FROM OnlineRetailSales$)
+
+SELECT * FROM OnlineRetailSales$,AVGTOTAL
+WHERE [Order Total]>=AVG_TOTAL
+
+WITH AVINASH(AVI_PRICE) AS
+(SELECT AVG([PRICE]) AS AVI_PRICE
+FROM OnlineRetailSales$)
+
+select * 
+from OnlineRetailSales$,AVINASH
+where [Quantity]>10;
+
+with DirectReports As(
+select [EmployeeID],[First Name],[Last Name],[Manager]
+from EmployeeDirectory$
+where [EmployeeID]=42
+union all
+
+select e.[EmployeeID],e.[First Name],e.[Last Name],e.[Manager]
+from EmployeeDirectory$ as E
+Inner join DirectReports as D on d.EmployeeID=e.[Manager]
+
+)
+
+
+select count(*) as Direct_Reports
+from DirectReports as D
+where d.[EmployeeID]!=42
+
+
+
+with instock(avg_instock) as
+(select avg([In Stock]) as avg_instock
+from Inventory$)
+
+select [prodcategory],[prodnumber],[prodname],[In Stock]
+from Inventory$ as I,instock
+where I.[In Stock]<avg_instock
+;
+
+
+select CustName,count(distinct OrderNum)
+from OnlineRetailSales$
+group by CustName
+
+select [orderNum],[orderdate],[custname],[prodname],[quantity],
+row_number() over(partition by [custname]order by orderdate) as row_num
+from OnlineRetailSales$ 
+
+
+with row_numbers as(select [orderNum],[orderdate],[custname],[prodname],[quantity],
+row_number() over(partition by [custname]order by orderdate) as row_num
+from OnlineRetailSales$ )
+
+select * from row_numbers where row_num=1;
+
+SELECT [orderNum], [orderdate], [custname], [prodname], [quantity], row_num
+FROM (
+    SELECT 
+        [orderNum],
+        [orderdate],
+        [custname],
+        [prodname],
+        [quantity],
+        ROW_NUMBER() OVER(PARTITION BY [custname] ORDER BY [orderdate]) AS row_num
+    FROM OnlineRetailSales$
+) AS numbered_rows
+WHERE row_num = 1;
+
+
+with row_numbers as
+(select [orderNum],[OrderDate],[CustName],[ProdCategory],[ProdName],[Order Total],
+row_number() over(partition by [prodcategory] order by [order total] desc ) as row_nums
+from OnlineRetailSales$
+where CustName='boehm inc.' 
+)
+
+select [orderNum],[OrderDate],[CustName],[ProdCategory],[ProdName],[Order Total] from row_numbers
+ where row_nums in (1,2,3);
+
+
+select [orderNum],[OrderDate],[CustName],[ProdCategory],[ProdName],[Order Total],row_nums
+from
+( select [orderNum],[OrderDate],[CustName],[ProdCategory],[ProdName],[Order Total],
+row_number() over(partition by [prodcategory] order by [order total] desc ) as row_nums
+from OnlineRetailSales$
+where CustName='boehm inc.' ) as row_n
+where row_nums in (1,2,3)
+order by ProdCategory;
+
+select [start date],[end date],[session name],
+
+lag([Session name],1) over(order by [start date] asc) as previoussession,
+lag([Start date],1) over(order by [start date] asc) as previoussessionstarttime,
+
+lead([Session name],1) over(order by [start date] asc) as nextsession,
+lead([Start date],1) over(order by [start date] asc) as nextsessionstarttime
+
+from SessionInfo$
+
+where [Room Name]='room 102';
+
+select * from OnlineRetailSales$
+where ProdName like '%drone%'
+
+with orderbyday as(
+select OrderDate,sum(Quantity) as quantitybyday 
+from OnlineRetailSales$
+where ProdCategory='drones'
+group by OrderDate)
+
+select orderdate,quantitybyday,
+lag([quantitybyday],1) over(order by[orderdate] asc) as quantities,
+lag([quantitybyday],2) over(order by[orderdate] asc) as quantities2,
+lag([quantitybyday],3) over(order by[orderdate] asc) as quantities3,
+lag([quantitybyday],4) over(order by[orderdate] asc) as quantities4,
+lag([quantitybyday],5) over(order by[orderdate] asc) as quantities5
+
+from orderbyday
+
+with three_attend as(
+select * ,
+rank() over(partition by [state] order by [Registration Date]) as rank_
+from ConventionAttendees$
+)
+
+select  *
+from three_attend
+where rank_<=3;
+
+select *from ConventionAttendees$
